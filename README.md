@@ -4,8 +4,8 @@ A full-stack game search application built for the Eneba Software Engineer Inter
 
 ## 🚀 Live Demo
 
-- **Frontend**: [Deployed on Vercel]
-- **Backend**: [Deployed on Railway]
+- **Frontend**: [Deployed on Vercel] (https://eneba-internship-task-514y.vercel.app)
+- **Backend**: [Deployed on Railway] (https://eneba-backend-production.up.railway.app/)
 - **Database**: PostgreSQL on Supabase
 
 ## 📋 Features
