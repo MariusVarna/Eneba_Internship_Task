@@ -1,8 +1,10 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import swaggerUi from 'swagger-ui-express';
 import pool, { initializeDatabase } from './db.js';
 import gamesRouter from './routes/games.js';
+import { swaggerSpec } from './swagger.js';
 
 dotenv.config();
 
@@ -21,6 +23,12 @@ app.use((req, res, next) => {
     console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
     next();
 });
+
+// Swagger API Documentation
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
+    customCss: '.swagger-ui .topbar { display: none }',
+    customSiteTitle: 'Eneba Game Search API'
+}));
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -57,6 +65,7 @@ async function startServer() {
             console.log(`🚀 Server running on port ${PORT}`);
             console.log(`📍 Environment: ${process.env.NODE_ENV || 'development'}`);
             console.log(`🔗 Health check: http://localhost:${PORT}/health`);
+            console.log(`📚 API Documentation: http://localhost:${PORT}/api-docs`);
         });
     } catch (error) {
         console.error('Failed to start server:', error);

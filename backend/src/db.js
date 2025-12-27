@@ -5,11 +5,39 @@ dotenv.config();
 
 const { Pool } = pg;
 
+// Parse connection string and force IPv4
+const connectionString = process.env.DATABASE_URL;
+
+let dbConfig;
+if (connectionString.includes('supabase.co')) {
+  // Extract connection details
+  const url = new URL(connectionString);
+
+  // Use connection pooling mode with IPv4
+  dbConfig = {
+    host: url.hostname,
+    port: parseInt(url.port) || 5432,
+    database: url.pathname.slice(1) || 'postgres',
+    user: url.username,
+    password: url.password,
+    ssl: { rejectUnauthorized: false },
+    // Force IPv4
+    family: 4,
+    // Connection settings
+    connectionTimeoutMillis: 10000,
+    idleTimeoutMillis: 30000,
+    max: 10
+  };
+} else {
+  dbConfig = {
+    connectionString,
+    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+    family: 4 // Force IPv4
+  };
+}
+
 // Create PostgreSQL connection pool
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
-});
+const pool = new Pool(dbConfig);
 
 // Test database connection
 pool.on('connect', () => {
@@ -24,7 +52,7 @@ pool.on('error', (err) => {
 // Initialize database schema
 export async function initializeDatabase() {
   const client = await pool.connect();
-  
+
   try {
     await client.query(`
       CREATE TABLE IF NOT EXISTS games (
@@ -46,7 +74,7 @@ export async function initializeDatabase() {
     await client.query(`
       CREATE INDEX IF NOT EXISTS idx_title ON games(title);
     `);
-    
+
     await client.query(`
       CREATE INDEX IF NOT EXISTS idx_platform ON games(platform);
     `);
