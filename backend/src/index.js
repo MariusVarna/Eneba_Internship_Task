@@ -57,27 +57,43 @@ app.use((err, req, res, next) => {
 });
 
 // Initialize database and start server
+// Initialize database and start server
 async function startServer() {
-    try {
-        await initializeDatabase();
+    if (process.env.VERCEL) {
+        console.log('⚡ Vercel environment detected - skipping manual port bind');
+        return;
+    }
 
-        app.listen(PORT, () => {
-            console.log(`🚀 Server running on port ${PORT}`);
-            console.log(`📍 Environment: ${process.env.NODE_ENV || 'development'}`);
-            console.log(`🔗 Health check: http://localhost:${PORT}/health`);
-            console.log(`📚 API Documentation: http://localhost:${PORT}/api-docs`);
-        });
+    // Start server immediately to satisfy Render's port binding requirement
+    const server = app.listen(PORT, () => {
+        console.log(`🚀 Server running on port ${PORT}`);
+        console.log(`📍 Environment: ${process.env.NODE_ENV || 'development'}`);
+        console.log(`🔗 Health check: http://localhost:${PORT}/health`);
+        console.log(`📚 API Documentation: http://localhost:${PORT}/api-docs`);
+    });
+
+    // Attempt database connection in background
+    try {
+        console.log('Attempting to connect to database...');
+        await initializeDatabase();
+        console.log('✅ Database initialization successful');
     } catch (error) {
-        console.error('Failed to start server:', error);
-        process.exit(1);
+        console.error('⚠️ Database initialization failed:', error.message);
     }
 }
 
 // Handle graceful shutdown
-process.on('SIGTERM', async () => {
-    console.log('SIGTERM received, closing server...');
-    await pool.end();
-    process.exit(0);
-});
+if (!process.env.VERCEL) {
+    process.on('SIGTERM', async () => {
+        console.log('SIGTERM received, closing server...');
+        // await pool.end(); // Pool removed in client mode
+        process.exit(0);
+    });
+}
 
-startServer();
+// Only start server if run directly (node index.js)
+if (import.meta.url === `file://${process.argv[1]}`) {
+    startServer();
+}
+
+export default app;

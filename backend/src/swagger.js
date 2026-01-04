@@ -1,11 +1,16 @@
 import swaggerJsdoc from 'swagger-jsdoc';
 
 const getServerUrl = () => {
+    // Render.com external URL
+    if (process.env.RENDER_EXTERNAL_URL) {
+        return process.env.RENDER_EXTERNAL_URL;
+    }
+    // Railway public domain
     if (process.env.RAILWAY_PUBLIC_DOMAIN) {
         return `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`;
     }
     if (process.env.NODE_ENV === 'production') {
-        return 'https://eneba-backend-production.up.railway.app';
+        return 'https://eneba-internship-backend.onrender.com';
     }
     return `http://localhost:${process.env.PORT || 3000}`;
 };

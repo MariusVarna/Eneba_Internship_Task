@@ -4,56 +4,32 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 const { Pool } = pg;
+let pool;
+const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-// Parse connection string and force IPv4
-const connectionString = process.env.DATABASE_URL;
+// Keep-alive removed in favor of short idle timeouts
+// to ensure fresh connections for every request burst
 
-let dbConfig;
-if (connectionString.includes('supabase.co')) {
-  // Extract connection details
-  const url = new URL(connectionString);
+// NO POOLING - DIRECT CLIENT STRATEGY
+// This connects, queries, and disconnects for EVERY request.
+// It is slower (higher latency) but IMMUNE to idle timeouts.
 
-  // Use connection pooling mode with IPv4
-  dbConfig = {
-    host: url.hostname,
-    port: parseInt(url.port) || 5432,
-    database: url.pathname.slice(1) || 'postgres',
-    user: url.username,
-    password: url.password,
-    ssl: { rejectUnauthorized: false },
-    // Force IPv4
-    family: 4,
-    // Connection settings
-    connectionTimeoutMillis: 10000,
-    idleTimeoutMillis: 30000,
-    max: 10
-  };
-} else {
-  dbConfig = {
-    connectionString,
-    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
-    family: 4 // Force IPv4
-  };
-}
+const { Client } = pg;
 
-// Create PostgreSQL connection pool
-const pool = new Pool(dbConfig);
-
-// Test database connection
-pool.on('connect', () => {
-  console.log('✅ Connected to PostgreSQL database');
-});
-
-pool.on('error', (err) => {
-  console.error('❌ Unexpected database error:', err);
-  process.exit(-1);
-});
-
-// Initialize database schema
+// We don't initialize a pool anymore.
 export async function initializeDatabase() {
-  const client = await pool.connect();
+  // Just test one connection to make sure credentials are valid
+  const client = new Client({
+    connectionString: process.env.DATABASE_URL,
+    ssl: { rejectUnauthorized: false },
+    connectionTimeoutMillis: 10000,
+  });
 
   try {
+    await client.connect();
+    console.log('✅ Connected to PostgreSQL database (Test Connection)');
+
+    // Run init queries
     await client.query(`
       CREATE TABLE IF NOT EXISTS games (
         id SERIAL PRIMARY KEY,
@@ -70,30 +46,47 @@ export async function initializeDatabase() {
       );
     `);
 
-    // Create indexes for better search performance
-    await client.query(`
-      CREATE INDEX IF NOT EXISTS idx_title ON games(title);
-    `);
+    // Create indexes
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_title ON games(title);`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_platform ON games(platform);`);
 
-    await client.query(`
-      CREATE INDEX IF NOT EXISTS idx_platform ON games(platform);
-    `);
-
-    // Enable trigram extension for fuzzy search (if available)
+    // Enable extensions
     try {
       await client.query(`CREATE EXTENSION IF NOT EXISTS pg_trgm;`);
-      console.log('✅ pg_trgm extension enabled for fuzzy search');
-    } catch (err) {
-      console.log('⚠️  pg_trgm extension not available, using ILIKE for search');
-    }
+    } catch (e) { console.log('Ext warning:', e.message); }
 
     console.log('✅ Database schema initialized');
-  } catch (error) {
-    console.error('❌ Error initializing database:', error);
-    throw error;
+  } catch (err) {
+    console.error('❌ Init failed:', err);
+    throw err;
   } finally {
-    client.release();
+    await client.end();
   }
 }
 
-export default pool;
+// Dummy getter for compatibility
+export const getPool = async () => null;
+
+export default {
+  query: async (text, params) => {
+    // Create FRESH connection for every single query
+    const client = new Client({
+      connectionString: process.env.DATABASE_URL,
+      ssl: { rejectUnauthorized: false },
+      connectionTimeoutMillis: 10000,
+    });
+
+    try {
+      await client.connect();
+      const res = await client.query(text, params);
+      return res;
+    } catch (err) {
+      console.error('❌ Query failed:', err.message);
+      throw err;
+    } finally {
+      // ALWAYS close immediately
+      await client.end();
+    }
+  },
+  end: async () => { } // No-op
+};
